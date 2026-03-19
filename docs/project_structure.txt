@@ -1,0 +1,136 @@
+fa-report-system/
+│
+├── README.md
+├── docker-compose.yml                  # Supabase local + FastAPI para desarrollo
+│
+├── ── BACKEND (FastAPI / Python) ──────────────────────────────────────────────
+│
+├── backend/
+│   ├── pyproject.toml                  # Dependencias: fastapi, uvicorn, pymupdf, pillow, supabase, sqlalchemy
+│   ├── Dockerfile
+│   ├── .env.example                    # Variables: DATABASE_URL, SUPABASE_URL, SUPABASE_KEY, TEMPLATE_PDF_PATH
+│   │
+│   ├── main.py                         # Entry point: crea la app FastAPI, registra routers
+│   │
+│   ├── app/
+│   │   │
+│   │   ├── core/
+│   │   │   ├── config.py               # Settings (pydantic-settings): env vars, rutas, constantes
+│   │   │   ├── database.py             # SQLAlchemy engine + SessionLocal + Base
+│   │   │   ├── dependencies.py         # get_db(), get_current_user(), etc.
+│   │   │   └── exceptions.py           # Excepciones HTTP personalizadas
+│   │   │
+│   │   ├── models/                     # SQLAlchemy ORM models (mapean las tablas del schema)
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py                 # class User
+│   │   │   ├── report.py               # class Report
+│   │   │   ├── report_image.py         # class ReportImage
+│   │   │   ├── electrical_test.py      # class ElectricalTestCatalog
+│   │   │   ├── test_result.py          # class TestResult
+│   │   │   └── audit_log.py            # class ReportAuditLog
+│   │   │
+│   │   ├── schemas/                    # Pydantic schemas (request / response DTOs)
+│   │   │   ├── __init__.py
+│   │   │   ├── report.py               # ReportCreate, ReportUpdate, ReportResponse, ReportSummary
+│   │   │   ├── report_image.py         # ImageUploadResponse, ImageSlot
+│   │   │   ├── test_result.py          # TestResultCreate, TestResultResponse
+│   │   │   ├── electrical_test.py      # ElectricalTestCatalogResponse
+│   │   │   └── user.py                 # UserCreate, UserResponse
+│   │   │
+│   │   ├── services/                   # Lógica de negocio (sin lógica HTTP)
+│   │   │   ├── __init__.py
+│   │   │   ├── report_service.py       # CRUD reportes, validaciones, cambios de estado
+│   │   │   ├── image_service.py        # Upload, resize (Pillow), storage (Supabase), reutilización NTF
+│   │   │   ├── test_service.py         # Lógica de secuencia de pruebas, manejo NG, NTF flow
+│   │   │   ├── pdf_service.py          # Orquestador: llama al pdf_engine, sube el PDF a storage
+│   │   │   └── audit_service.py        # Registro de cambios en audit_log
+│   │   │
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   └── routes/
+│   │   │       ├── __init__.py
+│   │   │       ├── reports.py          # POST /reports, GET /reports, GET /reports/{id}, PATCH /reports/{id}
+│   │   │       ├── images.py           # POST /reports/{id}/images, DELETE /reports/{id}/images/{img_id}
+│   │   │       ├── test_results.py     # POST /reports/{id}/test-results, GET /reports/{id}/test-results
+│   │   │       ├── pdf.py              # POST /reports/{id}/generate-pdf, GET /reports/{id}/download
+│   │   │       ├── catalog.py          # GET /tests-catalog  (solo lectura, seed data)
+│   │   │       └── users.py            # GET /users, POST /users
+│   │   │
+│   │   └── pdf_engine/                 # Motor de generación PDF — núcleo del sistema
+│   │       ├── __init__.py
+│   │       ├── pdf_coordinates.json    # Mapa de coordenadas por página (este archivo)
+│   │       ├── engine.py               # FAReportPDFEngine: clase principal, orquesta todo
+│   │       │                           #   → open_template()
+│   │       │                           #   → fill_page_1_visual()
+│   │       │                           #   → fill_page_2_terminals()
+│   │       │                           #   → fill_page_3_eol()
+│   │       │                           #   → fill_electrical_test_page(page_index, tests)
+│   │       │                           #   → save_pdf() → bytes
+│   │       ├── text_inserter.py        # Funciones de bajo nivel: insert_text(page, coords, text, style)
+│   │       ├── image_inserter.py       # Funciones de bajo nivel: insert_image(page, coords, image_bytes)
+│   │       ├── ng_marker.py            # Aplica estilo rojo a resultados NG
+│   │       └── image_processor.py     # Resize, crop, normalización de imágenes con Pillow
+│   │                                   #   → process_for_slot(image_bytes, slot_config) → bytes
+│   │
+│   ├── migrations/
+│   │   ├── 001_initial_schema.sql      # Schema completo (tablas, enums, triggers, views)
+│   │   └── 002_seed_data.sql           # Catálogo de 20 pruebas + usuarios default
+│   │
+│   ├── scripts/
+│   │   ├── verify_coordinates.py       # Extrae coordenadas reales del PDF template con PyMuPDF
+│   │   └── seed_db.py                  # Ejecuta los migrations en Supabase vía psycopg2
+│   │
+│   └── tests/
+│       ├── __init__.py
+│       ├── conftest.py                 # Fixtures: test DB, cliente HTTP, datos de prueba
+│       ├── test_reports.py             # Tests de endpoints de reportes
+│       ├── test_pdf_engine.py          # Tests del motor PDF: genera PDF de prueba y valida
+│       └── test_test_results.py        # Tests de flujo de pruebas eléctricas (OK/NG)
+│
+│
+├── ── FRONTEND (Next.js) ──────────────────────────────────────────────────────
+│   [A desarrollar en la siguiente fase]
+│
+├── frontend/
+│   ├── package.json
+│   ├── next.config.js
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   │
+│   ├── app/                            # Next.js 14 App Router
+│   │   ├── layout.tsx
+│   │   ├── page.tsx                    # Dashboard / historial de reportes
+│   │   ├── reports/
+│   │   │   ├── new/
+│   │   │   │   └── page.tsx            # Wizard: crear nuevo reporte
+│   │   │   └── [id]/
+│   │   │       ├── page.tsx            # Vista detalle del reporte
+│   │   │       └── edit/page.tsx       # Editar reporte existente
+│   │   └── api/                        # Route handlers de Next.js (proxy al backend si se necesita)
+│   │
+│   ├── components/
+│   │   ├── wizard/                     # Steps del wizard de captura
+│   │   │   ├── Step1_ReportData.tsx    # Datos iniciales del reporte
+│   │   │   ├── Step2_VisualInspection.tsx
+│   │   │   ├── Step3_TerminalInspection.tsx
+│   │   │   ├── Step4_EOLTest.tsx
+│   │   │   ├── Step5_NTFDecision.tsx   # ¿Es NTF? ¿Reutilizar imágenes?
+│   │   │   ├── Step6_ElectricalTests.tsx
+│   │   │   └── Step7_ReviewGenerate.tsx
+│   │   ├── ui/                         # Componentes base (Button, Input, Badge, etc.)
+│   │   ├── ImageUploader.tsx           # Drag & drop con preview
+│   │   ├── TestResultCard.tsx          # Tarjeta individual de prueba eléctrica
+│   │   └── PDFPreview.tsx              # Embed del PDF generado (pdf.js)
+│   │
+│   └── lib/
+│       ├── api.ts                      # Cliente HTTP hacia el backend FastAPI
+│       └── types.ts                    # TypeScript types (Report, TestResult, etc.)
+│
+│
+└── ── DOCS ────────────────────────────────────────────────────────────────────
+
+└── docs/
+    ├── architecture.md                 # Descripción de la arquitectura del sistema
+    ├── pdf_coordinate_calibration.md   # Cómo usar verify_coordinates.py y actualizar el JSON
+    ├── deployment.md                   # Railway (backend) + Vercel (frontend) + Supabase
+    └── electrical_tests_spec.md        # Referencia de las 20 pruebas eléctricas

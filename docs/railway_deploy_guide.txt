@@ -1,0 +1,213 @@
+GUÍA DE DEPLOY EN RAILWAY — FA Report System
+=============================================
+Tiempo estimado: 20-30 minutos la primera vez.
+
+
+═══════════════════════════════════════════════════════
+PASO 1 — PREPARAR SUPABASE
+═══════════════════════════════════════════════════════
+
+1.1  Ve a https://supabase.com → New Project
+     Nombre: fa-reports-yed
+     Contraseña de DB: genera una fuerte y guárdala
+     Región: East US (más cerca de Durango)
+
+1.2  Cuando cargue el dashboard, ve a:
+     Settings → Database → Connection string
+     Copia el string "Transaction pooler (IPv4)" — se ve así:
+     postgresql://postgres.xxxx:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+     
+     IMPORTANTE: Cambia "postgresql://" por "postgresql+asyncpg://"
+     Guárdalo como DATABASE_URL.
+
+1.3  Ve a Settings → API
+     Copia:
+       - Project URL  → SUPABASE_URL
+       - anon/public key → SUPABASE_KEY
+
+1.4  Ve a Storage → New bucket
+     Nombre: fa-reports
+     Public bucket: SÍ (para que las URLs de imágenes sean accesibles)
+     Click "Create bucket"
+
+1.5  En el SQL Editor de Supabase, ejecuta los migrations:
+     (Pega y ejecuta uno por uno)
+     
+     Primero: contenido de backend/migrations/001_initial_schema.sql
+     Luego:   contenido de backend/migrations/002_seed_data.sql
+
+
+═══════════════════════════════════════════════════════
+PASO 2 — SUBIR EL PDF TEMPLATE A SUPABASE
+═══════════════════════════════════════════════════════
+
+Desde tu máquina local, en la carpeta backend/:
+
+    pip install supabase httpx
+    
+    python scripts/upload_template.py \
+      --pdf /ruta/a/FA_BEC_2.pdf \
+      --supabase-url https://xxxx.supabase.co \
+      --supabase-key eyJh... \
+      --bucket fa-reports
+
+El script imprime la URL pública del template. Guárdala como:
+    TEMPLATE_PDF_URL=https://xxxx.supabase.co/storage/v1/object/public/fa-reports/templates/FA_BEC_2.pdf
+
+
+═══════════════════════════════════════════════════════
+PASO 3 — SUBIR EL CÓDIGO A GITHUB
+═══════════════════════════════════════════════════════
+
+3.1  Crea un repo en GitHub (puede ser privado)
+     Nombre sugerido: fa-report-system
+
+3.2  En la carpeta del proyecto:
+
+     cd fa-report-system
+     git init
+     git add .
+     git commit -m "feat: initial FA report system"
+     git remote add origin https://github.com/TU_USUARIO/fa-report-system.git
+     git push -u origin main
+
+IMPORTANTE — Antes de hacer git push, crea un .gitignore:
+
+     echo ".env" >> backend/.gitignore
+     echo "__pycache__/" >> backend/.gitignore
+     echo "*.pyc" >> backend/.gitignore
+     echo "/tmp/" >> backend/.gitignore
+     echo "*.pdf" >> backend/.gitignore    ← No subas el template al repo
+
+
+═══════════════════════════════════════════════════════
+PASO 4 — CREAR EL PROYECTO EN RAILWAY
+═══════════════════════════════════════════════════════
+
+4.1  Ve a https://railway.app → New Project
+     Elige: "Deploy from GitHub repo"
+     Autoriza Railway a acceder a tu GitHub
+     Selecciona: fa-report-system
+
+4.2  Railway detecta el repo. Click en el servicio creado.
+     
+     Ve a Settings → Root Directory
+     Escribe: backend
+     (Railway debe apuntar al subdirectorio backend/, no a la raíz)
+
+4.3  Railway va a intentar hacer build. Va a fallar porque aún
+     no tiene las variables de entorno. Eso es normal, continúa.
+
+
+═══════════════════════════════════════════════════════
+PASO 5 — CONFIGURAR VARIABLES DE ENTORNO EN RAILWAY
+═══════════════════════════════════════════════════════
+
+En tu proyecto de Railway → servicio backend → Variables:
+Click "Add Variable" para cada una:
+
+    DATABASE_URL        = postgresql+asyncpg://postgres.xxxx:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+    SUPABASE_URL        = https://xxxx.supabase.co
+    SUPABASE_KEY        = eyJh...  (tu anon key)
+    SUPABASE_STORAGE_BUCKET = fa-reports
+    TEMPLATE_PDF_URL    = https://xxxx.supabase.co/storage/v1/object/public/fa-reports/templates/FA_BEC_2.pdf
+    TEMPLATE_PDF_PATH   = /tmp/FA_BEC_2.pdf
+    CORS_ORIGINS        = ["http://localhost:3000","https://fa-reports.vercel.app"]
+
+Después de agregar todas, Railway hace redeploy automático.
+
+
+═══════════════════════════════════════════════════════
+PASO 6 — VERIFICAR QUE FUNCIONA
+═══════════════════════════════════════════════════════
+
+6.1  En Railway → tu servicio → Deployments
+     Espera que diga "Success" (tarda 2-4 min la primera vez)
+     
+     Si falla, ve a "View Logs" para ver el error.
+
+6.2  Cuando esté arriba, Railway te da una URL pública como:
+     https://fa-report-system-production.up.railway.app
+
+6.3  Prueba el health check en el browser:
+     https://fa-report-system-production.up.railway.app/health
+     
+     Debes ver:
+     {
+       "status": "ok",
+       "service": "FA Report API",
+       "template_pdf": "found"
+     }
+
+6.4  Prueba los docs interactivos (Swagger):
+     https://fa-report-system-production.up.railway.app/docs
+     
+     Desde ahí puedes probar todos los endpoints directamente.
+
+6.5  Prueba crear un reporte de prueba:
+     POST /api/reports con este body:
+     {
+       "report_number": "TEST-001",
+       "request_date": "2025-06-25",
+       "part_name": "PHEV BEC GEN 4",
+       "part_number": "L1M8 10C666 GF",
+       "yazaki_part_number": "7370-2573-8W",
+       "prepared_by_name": "Rodrigo Santana"
+     }
+     
+     Debe devolver 201 con el reporte creado.
+
+
+═══════════════════════════════════════════════════════
+ERRORES COMUNES Y SOLUCIONES
+═══════════════════════════════════════════════════════
+
+ERROR: "No module named 'fitz'"
+  → PyMuPDF no se instaló. Verifica que el Dockerfile use python:3.11-slim
+    y que el apt-get instale gcc y libffi-dev.
+
+ERROR: "could not connect to server" en la DB
+  → La DATABASE_URL está mal. Verifica que:
+    1. Usas "postgresql+asyncpg://" (no "postgresql://")
+    2. Estás usando el connection string de "Transaction pooler"
+    3. El password no tiene caracteres especiales sin encodear
+
+ERROR: "template_pdf: MISSING" en /health
+  → TEMPLATE_PDF_URL no está configurada o la descarga falló.
+    Verifica que la URL es pública en Supabase Storage.
+    En el bucket, ve a Storage → fa-reports → templates → FA_BEC_2.pdf
+    → Get URL → copia esa URL exacta.
+
+ERROR: Build falla con "poetry: command not found"
+  → El Dockerfile instala poetry correctamente. Si falla, Railway
+    podría estar usando buildpack en vez de Dockerfile.
+    Ve a Settings → Build → Builder → selecciona "Dockerfile" explícitamente.
+
+ERROR: CORS — "blocked by CORS policy" desde el frontend
+  → Agrega tu dominio de Vercel a CORS_ORIGINS:
+    ["http://localhost:3000","https://TU-APP.vercel.app"]
+
+
+═══════════════════════════════════════════════════════
+PASO 7 — CONECTAR EL FRONTEND (NEXT.JS EN VERCEL)
+═══════════════════════════════════════════════════════
+
+7.1  Sube el frontend a Vercel:
+     vercel --cwd frontend
+
+7.2  En Vercel → Settings → Environment Variables:
+     NEXT_PUBLIC_API_URL = https://fa-report-system-production.up.railway.app
+
+7.3  Actualiza CORS_ORIGINS en Railway con tu URL de Vercel.
+
+7.4  Redeploy Railway para que tome el nuevo CORS.
+
+
+═══════════════════════════════════════════════════════
+RESUMEN DE URLs FINALES
+═══════════════════════════════════════════════════════
+
+Backend API:     https://fa-report-system-production.up.railway.app
+Swagger Docs:    https://fa-report-system-production.up.railway.app/docs
+Frontend:        https://fa-reports.vercel.app  (o el que te asigne Vercel)
+Supabase:        https://xxxx.supabase.co
